@@ -132,6 +132,19 @@ npm run dev
 
 ---
 
+## Demo Credentials
+
+Run `npm run db:seed` to populate the database with test users.
+
+| Role      | Email                  | Password    | Department    |
+|-----------|------------------------|-------------|---------------|
+| HR Admin  | hr@company.com         | admin123    | Human Resources |
+| Employee  | john@company.com       | employee123 | Engineering   |
+| Employee  | jane@company.com       | employee123 | Marketing     |
+| Employee  | bob@company.com        | employee123 | Finance       |
+
+---
+
 ## Environment Variables
 
 ### Backend (.env)
