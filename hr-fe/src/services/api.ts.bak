@@ -1,0 +1,221 @@
+import type {
+  User,
+  LoginCredentials,
+  ApiResponse,
+  Employee,
+  Attendance,
+  LoginResponse,
+  PaginatedResponse,
+  CheckInData,
+} from '../types';
+import { apiClient } from '../lib/api-client';
+import { toUser, toEmployee, toAttendance } from '../types/mappers';
+
+// ============= AUTH SERVICE =============
+
+export const authService = {
+  async login(credentials: LoginCredentials): Promise<ApiResponse<User>> {
+    try {
+      const response = await apiClient.post<LoginResponse>('/auth/login', credentials);
+      const { access_token, user } = response.data;
+
+      // Store JWT token
+      localStorage.setItem('auth_token', access_token);
+
+      // Convert and store user
+      const frontendUser = toUser(user);
+      localStorage.setItem('hr_user', JSON.stringify(frontendUser));
+
+      return { success: true, data: frontendUser };
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Login failed';
+      return { success: false, error: message };
+    }
+  },
+
+  async logout(): Promise<ApiResponse<void>> {
+    try {
+      await apiClient.post('/auth/logout');
+    } catch {
+      // Continue with local logout even if API call fails
+    }
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('hr_user');
+    return { success: true };
+  },
+
+  async getCurrentUser(): Promise<ApiResponse<User | null>> {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return { success: true, data: null };
+
+      const storedUser = localStorage.getItem('hr_user');
+      if (storedUser) {
+        return { success: true, data: JSON.parse(storedUser) };
+      }
+
+      // Optionally fetch fresh user data from /auth/me endpoint
+      return { success: true, data: null };
+    } catch {
+      return { success: true, data: null };
+    }
+  },
+};
+
+// ============= EMPLOYEE SERVICE =============
+
+export const employeeService = {
+  async getAll(params?: { page?: number; limit?: number; startDate?: string; endDate?: string }): Promise<ApiResponse<Employee[]>> {
+    try {
+      const query = new URLSearchParams();
+      if (params?.page) query.set('page', params.page.toString());
+      if (params?.limit) query.set('limit', params.limit.toString());
+
+      const url = `/employees${query.toString() ? '?' + query.toString() : ''}`;
+      const response = await apiClient.get<PaginatedResponse<any>>(url);
+      const employees = response.data.data.map(toEmployee);
+      return { success: true, data: employees };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.message || 'Failed to fetch employees' };
+    }
+  },
+
+  async getById(id: number): Promise<ApiResponse<Employee>> {
+    try {
+      const response = await apiClient.get(`/employees/${id}`);
+      return { success: true, data: toEmployee(response.data) };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.message || 'Employee not found' };
+    }
+  },
+
+  async create(data: Partial<Employee>): Promise<ApiResponse<Employee>> {
+    try {
+      const response = await apiClient.post('/employees', data);
+      return { success: true, data: toEmployee(response.data) };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.message || 'Failed to create employee' };
+    }
+  },
+
+  async update(id: number, data: Partial<Employee>): Promise<ApiResponse<Employee>> {
+    try {
+      const response = await apiClient.put(`/employees/${id}`, data);
+      return { success: true, data: toEmployee(response.data) };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.message || 'Failed to update employee' };
+    }
+  },
+
+  async delete(id: number): Promise<ApiResponse<void>> {
+    try {
+      await apiClient.delete(`/employees/${id}`);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.message || 'Failed to delete employee' };
+    }
+  },
+};
+
+// ============= ATTENDANCE SERVICE =============
+
+export const attendanceService = {
+  async getMyAttendances(params?: { page?: number; limit?: number; startDate?: string; endDate?: string }): Promise<ApiResponse<Attendance[]> & { pagination?: any }>> {
+    try {
+      const query = new URLSearchParams();
+      if (params?.page) query.set('page', params.page.toString());
+      if (params?.limit) query.set('limit', params.limit.toString());
+
+      const url = `/attendance/my-history${query.toString() ? '?' + query.toString() : ''}`;
+      const response = await apiClient.get<any>(url);
+      // Backend returns { data: [], pagination: {} }
+      const attendances = (response.data.data || []).map(toAttendance);
+      return { success: true, data: attendances, pagination: response.data.pagination };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.message || 'Failed to fetch attendance' };
+    }
+  },
+
+  async getAll(params?: { date?: string; page?: number; limit?: number }): Promise<ApiResponse<Attendance[]>> {
+    try {
+      const query = new URLSearchParams();
+      if (params?.date) query.set('date', params.date);
+      if (params?.page) query.set('page', params.page.toString());
+      if (params?.limit) query.set('limit', params.limit.toString());
+
+      const url = `/attendance${query.toString() ? '?' + query.toString() : ''}`;
+      const response = await apiClient.get<any>(url);
+      // Backend returns { data: [], pagination: {} }
+      const attendances = (response.data.data || []).map(toAttendance);
+      return { success: true, data: attendances };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.message || 'Failed to fetch attendance' };
+    }
+  },
+
+  async checkIn(data: CheckInData): Promise<ApiResponse<Attendance>> {
+    try {
+      const formData = new FormData();
+      if (data.photo) {
+        formData.append('photo', data.photo);
+      }
+      if (data.notes) {
+        formData.append('notes', data.notes);
+      }
+      // Location is sent as part of notes or separate field
+
+      const response = await apiClient.post<Attendance>('/attendance/submit', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return { success: true, data: toAttendance(response.data) };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.message || 'Failed to check in' };
+    }
+  },
+
+  async getTodayAttendance(): Promise<ApiResponse<Attendance | null>> {
+    try {
+      const response = await apiClient.get<any>('/attendance/today');
+      if (response.data) {
+        return { success: true, data: toAttendance(response.data) };
+      }
+      return { success: true, data: null };
+    } catch (error: any) {
+      return { success: false, data: null };
+    }
+  },
+
+  async clockOut(id: number, photo?: File): Promise<ApiResponse<Attendance>> {
+    try {
+      const formData = new FormData();
+      if (photo) {
+        formData.append('photo', photo);
+      }
+
+      const response = await apiClient.post<Attendance>(`/attendance/clock-out/${id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return { success: true, data: toAttendance(response.data) };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.message || 'Failed to clock out' };
+    }
+  },
+
+  async approve(id: number): Promise<ApiResponse<Attendance>> {
+    try {
+      const response = await apiClient.put<Attendance>(`/attendance/${id}/approve`);
+      return { success: true, data: toAttendance(response.data) };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.message || 'Failed to approve' };
+    }
+  },
+
+  async reject(id: number, reason: string): Promise<ApiResponse<Attendance>> {
+    try {
+      const response = await apiClient.put<Attendance>(`/attendance/${id}/reject`, { reason });
+      return { success: true, data: toAttendance(response.data) };
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.message || 'Failed to reject' };
+    }
+  },
+};
