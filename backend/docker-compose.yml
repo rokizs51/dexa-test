@@ -1,0 +1,206 @@
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  dexa-db-data:
+  app-uploads:
+
+services:
+  # Single MySQL Database for all services
+  dexa-db:
+    image: mysql:8.0
+    container_name: dexa-db
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: dexa_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - dexa-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app-network
+
+  # NestJS Microservices
+  api-gateway:
+    build:
+      context: .
+      target: development
+    container_name: api-gateway
+    user: "1000:1000"
+    environment:
+      - GATEWAY_PORT=3000
+      - AUTH_SERVICE_HOST=auth-service
+      - AUTH_SERVICE_PORT=3001
+      - EMPLOYEE_SERVICE_HOST=employee-service
+      - EMPLOYEE_SERVICE_PORT=3002
+      - ATTENDANCE_SERVICE_HOST=attendance-service
+      - ATTENDANCE_SERVICE_PORT=3003
+      - FILE_SERVICE_HOST=file-service
+      - FILE_SERVICE_PORT=3004
+      - UPLOADS_DIR=/app/uploads
+      - FILE_BASE_URL=http://localhost:3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - app-uploads:/app/uploads
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      employee-service:
+        condition: service_healthy
+      attendance-service:
+        condition: service_healthy
+      file-service:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    command: sh -c "npm run start:dev:api-gateway"
+
+  auth-service:
+    build:
+      context: .
+      target: development
+    container_name: auth-service
+    user: "1000:1000"
+    environment:
+      - AUTH_SERVICE_PORT=3001
+      - MICROSERVICE_HOST=0.0.0.0
+      - MICROSERVICE_PORT=3001
+      - DB_HOST=dexa-db
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=password
+      - DB_NAME=dexa_db
+    ports:
+      - "3001:3001"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      dexa-db:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "3001"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    command: sh -c "npm run start:dev:auth-service"
+
+  employee-service:
+    build:
+      context: .
+      target: development
+    container_name: employee-service
+    user: "1000:1000"
+    environment:
+      - EMPLOYEE_SERVICE_PORT=3002
+      - MICROSERVICE_HOST=0.0.0.0
+      - MICROSERVICE_PORT=3002
+      - DB_HOST=dexa-db
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=password
+      - DB_NAME=dexa_db
+    ports:
+      - "3002:3002"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      dexa-db:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "3002"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    command: sh -c "npm run start:dev:employee-service"
+
+  attendance-service:
+    build:
+      context: .
+      target: development
+    container_name: attendance-service
+    user: "1000:1000"
+    environment:
+      - ATTENDANCE_SERVICE_PORT=3003
+      - MICROSERVICE_HOST=0.0.0.0
+      - MICROSERVICE_PORT=3003
+      - DB_HOST=dexa-db
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=password
+      - DB_NAME=dexa_db
+    ports:
+      - "3003:3003"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      dexa-db:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "3003"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    command: sh -c "npm run start:dev:attendance-service"
+
+  file-service:
+    build:
+      context: .
+      target: development
+    container_name: file-service
+    # Run as root to have write permissions for uploads
+    environment:
+      - FILE_SERVICE_PORT=3004
+      - MICROSERVICE_HOST=0.0.0.0
+      - MICROSERVICE_PORT=3004
+      - DB_HOST=dexa-db
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=password
+      - DB_NAME=dexa_db
+      - UPLOAD_DIR=/app/uploads/attendance-photos
+      - FILE_BASE_URL=http://localhost:3000
+    ports:
+      - "3004:3004"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - app-uploads:/app/uploads
+    depends_on:
+      dexa-db:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "3004"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    command: sh -c "npm run start:dev:file-service"
