@@ -80,7 +80,7 @@ const AttendanceMonitoring = () => {
       if (statusModal.newStatus === 'approved') {
         response = await attendanceService.approve(statusModal.attendance.id);
       } else {
-        response = await attendanceService.reject(statusModal.attendance.id, '');
+        response = await attendanceService.reject(statusModal.attendance.id, 'Rejected by HR/Admin');
       }
       if (response.success) {
         loadAttendances();
