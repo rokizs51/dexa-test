@@ -6,15 +6,10 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Public } from './decorators/public.decorator';
 import { Roles } from './decorators/roles.decorator';
-import { ExtractJwt } from 'passport-jwt';
-import { BlacklistService } from '../blacklist/blacklist.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private authService: AuthService,
-    private blacklistService: BlacklistService,
-  ) {}
+  constructor(private authService: AuthService) {}
 
   @Public()
   @UseGuards(LocalAuthGuard)
@@ -25,13 +20,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('logout')
-  async logout(@Request() req): Promise<{ message: string }> {
-    const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
-
-    if (token && req.user?.exp) {
-      await this.blacklistService.addToBlacklist(token, new Date(req.user.exp * 1000));
-    }
-
+  async logout(): Promise<{ message: string }> {
     return { message: 'Logged out successfully' };
   }
 

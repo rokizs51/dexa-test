@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Camera, Upload, X, MapPin, Clock, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { attendanceService } from '../services/api';
@@ -24,7 +24,6 @@ const CheckIn = () => {
   // Clock-out state
   const [clockOutPhoto, setClockOutPhoto] = useState<File | null>(null);
   const [clockOutPhotoPreview, setClockOutPhotoPreview] = useState<string | null>(null);
-  // Clock-out notes - available for future use
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const clockOutFileInputRef = useRef<HTMLInputElement>(null);
@@ -35,6 +34,10 @@ const CheckIn = () => {
   const [showClockOutCamera, setShowClockOutCamera] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [capturedClockOutPhoto, setCapturedClockOutPhoto] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  // Track if video is initialized to prevent re-renders
+  const videoInitializedRef = useRef(false);
 
   useEffect(() => {
     loadTodayAttendance();
@@ -52,88 +55,115 @@ const CheckIn = () => {
     }
   };
 
-  // Check-in handlers
-  const handleTakePhoto = async () => {
+  // Stop stream
+  const stopStream = useCallback(() => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+    videoInitializedRef.current = false;
+  }, [stream]);
+
+  // Initialize video element
+  const initVideo = useCallback(async (video: HTMLVideoElement | null) => {
+    if (!video || videoInitializedRef.current) return;
+
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
+      const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
           width: { ideal: 1280 },
           height: { ideal: 720 }
         }
-      });
+      };
+
+      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch(err => {
-            console.error('Error playing video:', err);
-            alert('Unable to start video stream. Please try again or use file upload.');
-            handleCloseCamera();
-          });
-        };
-      }
-      setShowCamera(true);
+      video.srcObject = mediaStream;
+
+      video.onloadedmetadata = () => {
+        video.play().then(() => {
+          videoInitializedRef.current = true;
+          setCameraError(null);
+        }).catch((err) => {
+          console.error('Play error:', err);
+          setCameraError('Failed to play video stream');
+        });
+      };
+
+      video.onerror = () => {
+        setCameraError('Video error occurred');
+      };
+
     } catch (err: any) {
       console.error('Camera error:', err);
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        alert('Camera access denied. Please allow camera access in your browser settings or use file upload.');
+        setCameraError('Camera access denied. Please allow camera access in browser settings.');
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        alert('No camera found. Please use file upload instead.');
+        setCameraError('No camera found. Please use file upload instead.');
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        alert('Camera is already in use by another application. Please close other apps or use file upload.');
+        setCameraError('Camera is already in use by another application.');
       } else {
-        alert(`Unable to access camera: ${err.message || 'Unknown error'}. Please use file upload instead.`);
+        setCameraError(err.message || 'Unknown camera error');
       }
     }
+  }, []);
+
+  // Check-in handlers
+  const handleTakePhoto = async () => {
+    setCameraError(null);
+    stopStream();
+    setShowCamera(true);
+    // Wait for render then init video
+    setTimeout(() => {
+      initVideo(videoRef.current);
+    }, 100);
   };
 
   const capturePhoto = () => {
-    if (videoRef.current && videoRef.current.readyState >= 2) {
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        alert('Failed to capture photo. Please try again.');
-        return;
-      }
-      ctx.drawImage(videoRef.current, 0, 0);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
-          setPhoto(file);
-          setCapturedPhoto(dataUrl);
-          setPhotoPreview(dataUrl);
-          setShowCamera(false);
-          if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-            setStream(null);
-          }
-        } else {
-          alert('Failed to capture photo. Please try again.');
-        }
-      }, 'image/jpeg', 0.9);
-    } else {
-      alert('Camera not ready. Please wait for video to load or try again.');
+    const video = videoRef.current;
+    if (!video || video.readyState < 2 || !video.videoWidth) {
+      alert('Camera not ready. Please wait a moment and try again.');
+      return;
     }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      alert('Failed to capture photo. Please try again.');
+      return;
+    }
+    ctx.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+        setPhoto(file);
+        setCapturedPhoto(dataUrl);
+        setPhotoPreview(dataUrl);
+        setShowCamera(false);
+        stopStream();
+      } else {
+        alert('Failed to capture photo. Please try again.');
+      }
+    }, 'image/jpeg', 0.9);
   };
 
   const retakePhoto = () => {
     setCapturedPhoto(null);
     setPhotoPreview(null);
     setPhoto(null);
+    stopStream();
     handleTakePhoto();
   };
 
   const handleCloseCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
+    stopStream();
     setShowCamera(false);
+    setCameraError(null);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,86 +189,59 @@ const CheckIn = () => {
 
   // Clock-out handlers
   const handleClockOutTakePhoto = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      });
-      setStream(mediaStream);
-      if (clockOutVideoRef.current) {
-        clockOutVideoRef.current.srcObject = mediaStream;
-        clockOutVideoRef.current.onloadedmetadata = () => {
-          clockOutVideoRef.current?.play().catch(err => {
-            console.error('Error playing video:', err);
-            alert('Unable to start video stream. Please try again or use file upload.');
-            handleClockOutCloseCamera();
-          });
-        };
-      }
-      setShowClockOutCamera(true);
-    } catch (err: any) {
-      console.error('Camera error:', err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        alert('Camera access denied. Please allow camera access in your browser settings or use file upload.');
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        alert('No camera found. Please use file upload instead.');
-      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        alert('Camera is already in use by another application. Please close other apps or use file upload.');
-      } else {
-        alert(`Unable to access camera: ${err.message || 'Unknown error'}. Please use file upload instead.`);
-      }
-    }
+    setCameraError(null);
+    stopStream();
+    setShowClockOutCamera(true);
+    // Wait for render then init video
+    setTimeout(() => {
+      initVideo(clockOutVideoRef.current);
+    }, 100);
   };
 
   const captureClockOutPhoto = () => {
-    if (clockOutVideoRef.current && clockOutVideoRef.current.readyState >= 2) {
-      const canvas = document.createElement('canvas');
-      canvas.width = clockOutVideoRef.current.videoWidth;
-      canvas.height = clockOutVideoRef.current.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        alert('Failed to capture photo. Please try again.');
-        return;
-      }
-      ctx.drawImage(clockOutVideoRef.current, 0, 0);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const file = new File([blob], 'clockout-photo.jpg', { type: 'image/jpeg' });
-          setClockOutPhoto(file);
-          setCapturedClockOutPhoto(dataUrl);
-          setClockOutPhotoPreview(dataUrl);
-          setShowClockOutCamera(false);
-          if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-            setStream(null);
-          }
-        } else {
-          alert('Failed to capture photo. Please try again.');
-        }
-      }, 'image/jpeg', 0.9);
-    } else {
-      alert('Camera not ready. Please wait for video to load or try again.');
+    const video = clockOutVideoRef.current;
+    if (!video || video.readyState < 2 || !video.videoWidth) {
+      alert('Camera not ready. Please wait a moment and try again.');
+      return;
     }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      alert('Failed to capture photo. Please try again.');
+      return;
+    }
+    ctx.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], 'clockout-photo.jpg', { type: 'image/jpeg' });
+        setClockOutPhoto(file);
+        setCapturedClockOutPhoto(dataUrl);
+        setClockOutPhotoPreview(dataUrl);
+        setShowClockOutCamera(false);
+        stopStream();
+      } else {
+        alert('Failed to capture photo. Please try again.');
+      }
+    }, 'image/jpeg', 0.9);
   };
 
   const retakeClockOutPhoto = () => {
     setCapturedClockOutPhoto(null);
     setClockOutPhotoPreview(null);
     setClockOutPhoto(null);
+    stopStream();
     handleClockOutTakePhoto();
   };
 
   const handleClockOutCloseCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
+    stopStream();
     setShowClockOutCamera(false);
+    setCameraError(null);
   };
 
   const handleClockOutFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -330,7 +333,6 @@ const CheckIn = () => {
       const apiResponse = await attendanceService.clockOut(todayAttendance.id, photoToSend || undefined);
 
       if (apiResponse.success) {
-        // Refresh attendance data to get total working hours
         await loadTodayAttendance();
         setSuccess('clock-out');
         setClockOutPhoto(null);
@@ -443,12 +445,22 @@ const CheckIn = () => {
             <CardDescription>Take a photo or upload an image as proof of work</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {cameraError && showCamera && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <p className="text-red-600 text-sm">{cameraError}</p>
+                <Button variant="outline" size="sm" className="mt-2" onClick={handleCloseCamera}>
+                  Close Camera
+                </Button>
+              </div>
+            )}
+
             {showCamera ? (
               <div className="relative">
                 <video
                   ref={videoRef}
                   autoPlay
                   playsInline
+                  muted
                   className="w-full rounded-lg bg-brown-100"
                 />
                 <div className="flex gap-3 mt-4">
@@ -530,12 +542,22 @@ const CheckIn = () => {
             <CardDescription>End your workday by clocking out</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {cameraError && showClockOutCamera && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <p className="text-red-600 text-sm">{cameraError}</p>
+                <Button variant="outline" size="sm" className="mt-2" onClick={handleClockOutCloseCamera}>
+                  Close Camera
+                </Button>
+              </div>
+            )}
+
             {showClockOutCamera ? (
               <div className="relative">
                 <video
                   ref={clockOutVideoRef}
                   autoPlay
                   playsInline
+                  muted
                   className="w-full rounded-lg bg-brown-100"
                 />
                 <div className="flex gap-3 mt-4">

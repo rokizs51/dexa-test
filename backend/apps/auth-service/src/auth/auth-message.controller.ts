@@ -1,16 +1,12 @@
 import { Controller, Logger } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
-import { BlacklistService } from '../blacklist/blacklist.service';
 
 @Controller()
 export class AuthMessageController {
   private readonly logger = new Logger(AuthMessageController.name);
 
-  constructor(
-    private authService: AuthService,
-    private blacklistService: BlacklistService,
-  ) {
+  constructor(private authService: AuthService) {
     this.logger.log('[AuthMessageController] Constructor - AuthMessageController instantiated');
   }
 
@@ -18,7 +14,7 @@ export class AuthMessageController {
   async login(@Payload() data: { email: string; password: string }) {
     this.logger.log('[AuthMessageController] Received login message with pattern "login"');
     this.logger.log('[AuthMessageController] Payload data:', JSON.stringify(data));
-    
+
     try {
       const user = await this.authService.validateUser(data.email, data.password);
 

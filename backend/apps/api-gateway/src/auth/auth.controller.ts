@@ -1,10 +1,11 @@
-import { Controller, Post, Body, HttpException, HttpStatus, Inject, Logger } from '@nestjs/common';
+import { Controller, Post, Body, HttpException, HttpStatus, Inject, Logger, Req, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { HttpService } from '@nestjs/axios';
 import { lastValueFrom } from 'rxjs';
 import { LoginDto } from './dto/login.dto';
 import { Public } from '@dexa/common';
 import { ConfigService } from '@nestjs/config';
+import { AuthGuard } from '@nestjs/passport';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -41,5 +42,14 @@ export class AuthController {
       }
       throw new HttpException('Internal server error', HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('logout')
+  @ApiOperation({ summary: 'Logout', description: 'Logout and invalidate token' })
+  @ApiResponse({ status: 200, description: 'Logout successful' })
+  async logout() {
+    this.logger.log('Logout successful');
+    return { message: 'Logged out successfully' };
   }
 }

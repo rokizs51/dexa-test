@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
-import { DrizzleService, attendance } from '@dexa/database';
+import { DrizzleService, attendance, employees } from '@dexa/database';
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
 import { SubmitAttendanceDto } from './dto/submit-attendance.dto';
 import { DateFilterDto } from './dto/date-filter.dto';
@@ -61,11 +61,13 @@ export class AttendanceService {
 
     const total = Number(countResult?.count) || 0;
 
-    // Get paginated data ordered by checkInTime descending (most recent first)
+    // Get paginated data ordered by checkInTime descending (most recent first) with employee join
     const data = await this.drizzle.db
       .select({
         id: attendance.id,
         employeeCode: attendance.employeeCode,
+        employeeName: employees.fullName,
+        department: employees.department,
         checkInTime: attendance.checkInTime,
         checkOutTime: attendance.checkOutTime,
         photoUrl: attendance.photoUrl,
@@ -77,6 +79,7 @@ export class AttendanceService {
         updatedAt: attendance.updatedAt,
       })
       .from(attendance)
+      .leftJoin(employees, eq(attendance.employeeCode, employees.employeeCode))
       .where(whereClause)
       .orderBy(desc(attendance.checkInTime))
       .limit(limit)
@@ -119,10 +122,25 @@ export class AttendanceService {
 
     const total = Number(countResult?.count) || 0;
 
-    // Get paginated data ordered by checkInTime descending
+    // Get paginated data ordered by checkInTime descending with employee join
     const data = await this.drizzle.db
-      .select()
+      .select({
+        id: attendance.id,
+        employeeCode: attendance.employeeCode,
+        employeeName: employees.fullName,
+        department: employees.department,
+        checkInTime: attendance.checkInTime,
+        checkOutTime: attendance.checkOutTime,
+        photoUrl: attendance.photoUrl,
+        checkOutPhotoUrl: attendance.checkOutPhotoUrl,
+        totalWorkingHours: attendance.totalWorkingHours,
+        status: attendance.status,
+        rejectionReason: attendance.rejectionReason,
+        createdAt: attendance.createdAt,
+        updatedAt: attendance.updatedAt,
+      })
       .from(attendance)
+      .leftJoin(employees, eq(attendance.employeeCode, employees.employeeCode))
       .where(whereClause)
       .orderBy(desc(attendance.checkInTime))
       .limit(limit)

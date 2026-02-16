@@ -5,6 +5,7 @@ import type { Attendance } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/Card';
 import { formatDate, formatTime, getStatusColor } from '../lib/utils';
 import Button from '../components/Button';
+import { Photo } from '../components/Photo';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -225,15 +226,7 @@ const AttendanceHistory = () => {
                           {record.totalWorkingHours || '-'}
                         </td>
                         <td className="px-6 py-4">
-                          {record.photoUrl ? (
-                            <img
-                              src={record.photoUrl}
-                              alt="Attendance"
-                              className="w-10 h-10 rounded-lg object-cover"
-                            />
-                          ) : (
-                            <span className="text-brown-400">-</span>
-                          )}
+                          <Photo src={record.photoUrl} alt="Check-in photo" size="sm" />
                         </td>
                         <td className="px-6 py-4">
                           <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(record.status)}`}>

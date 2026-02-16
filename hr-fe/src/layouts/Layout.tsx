@@ -23,8 +23,6 @@ const Layout = () => {
 
   const hrNavigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Check In', href: '/check-in', icon: Clock },
-    { name: 'Attendance History', href: '/attendance-history', icon: History },
     { name: 'Employee Management', href: '/employees', icon: Users },
     { name: 'Attendance Monitoring', href: '/monitoring', icon: ClipboardCheck },
   ];

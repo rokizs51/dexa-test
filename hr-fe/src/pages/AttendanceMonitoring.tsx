@@ -5,6 +5,7 @@ import type { Attendance } from '../types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/Card';
 import Button from '../components/Button';
 import { Modal } from '../components/Modal';
+import { Photo } from '../components/Photo';
 import { formatDate, formatTime, getStatusColor } from '../lib/utils';
 
 const AttendanceMonitoring = () => {
@@ -177,7 +178,9 @@ const AttendanceMonitoring = () => {
                         <th className="px-6 py-3 text-left text-sm font-semibold text-brown-700">Employee</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-brown-700">Department</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-brown-700">Check In</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-brown-700">Photo</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-brown-700">Check Out</th>
+                        <th className="px-6 py-3 text-left text-sm font-semibold text-brown-700">Photo</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-brown-700">Working Hours</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-brown-700">Status</th>
                         <th className="px-6 py-3 text-left text-sm font-semibold text-brown-700">Actions</th>
@@ -207,12 +210,18 @@ const AttendanceMonitoring = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4">
+                            <Photo src={record.photoUrl} alt="Check-in photo" size="sm" />
+                          </td>
+                          <td className="px-6 py-4">
                             <div className="flex items-center gap-2">
                               <LogOut size={14} className="text-brown-400" />
                               <span className="text-brown-900">
                                 {record.checkOutTime ? formatTime(record.checkOutTime) : '-'}
                               </span>
                             </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <Photo src={record.checkOutPhotoUrl} alt="Check-out photo" size="sm" />
                           </td>
                           <td className="px-6 py-4 text-brown-600 font-medium">
                             {record.totalWorkingHours || '-'}

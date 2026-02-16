@@ -12,12 +12,9 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
-import { BlacklistModule } from '../blacklist/blacklist.module';
-
 @Module({
   imports: [
     PassportModule,
-    BlacklistModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService): JwtModuleOptions => ({
