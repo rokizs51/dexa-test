@@ -54,13 +54,14 @@ export interface Attendance {
 
 export interface Employee {
   id: number;
-  userId: number;
+  userId?: number;
   employeeCode: string;
   fullName: string;
   email: string;
   department: string;
   position: string;
   joinDate: string;
+  password?: string;  // Only used when creating, never returned from API
   isActive?: boolean;
   status?: 'active' | 'inactive';  // Frontend alias
 }

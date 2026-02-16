@@ -15,31 +15,57 @@ export class EmployeeService {
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
     try {
-      const result = await this.drizzle.db.insert(employees).values({
-        employeeCode: dto.employeeCode,
-        email: dto.email,
-        passwordHash,
-        fullName: dto.fullName,
-        department: dto.department,
-        position: dto.position,
-        joinDate: dto.joinDate,
+      // Use transaction to ensure both employee and auth user are created together
+      const result = await this.drizzle.db.transaction(async (tx) => {
+        // 1. Create the employee record
+        const employeeResult = await tx.insert(employees).values({
+          employeeCode: dto.employeeCode,
+          email: dto.email,
+          passwordHash,
+          fullName: dto.fullName,
+          department: dto.department,
+          position: dto.position,
+          joinDate: new Date(dto.joinDate).toISOString().split('T')[0],
+        });
+
+        const employeeId = employeeResult[0].insertId;
+
+        // 2. Create the auth user record so the employee can login
+        await tx.insert(users).values({
+          email: dto.email,
+          passwordHash,
+          role: 'employee',
+          isActive: true,
+        });
+
+        return { id: employeeId };
       });
 
       return {
-        id: result[0].insertId,
+        id: result.id,
         message: 'Employee created successfully',
       };
     } catch (error: any) {
-      // Handle duplicate key errors
-      if (error.code === 'ER_DUP_ENTRY' || error.message?.includes('Duplicate')) {
-        if (error.message?.includes('employee_code') || error.sqlMessage?.includes('employee_code')) {
+      // Handle duplicate key errors - drizzle-orm throws errors differently
+      const errorMessage = error.message || '';
+      const sqlMessage = error.sqlMessage || '';
+      const errorCode = error.code || '';
+
+      // Check for duplicate entry (MySQL error codes and messages)
+      if (
+        errorCode === 'ER_DUP_ENTRY' ||
+        errorMessage.includes('Duplicate entry') ||
+        sqlMessage.includes('Duplicate entry') ||
+        errorMessage.includes('Duplicate')
+      ) {
+        if (sqlMessage.includes('employee_code') || errorMessage.includes('employee_code')) {
           throw new RpcException({
             statusCode: 409,
             message: 'Employee code already exists',
             code: 'DUPLICATE_EMPLOYEE_CODE',
           });
         }
-        if (error.message?.includes('email') || error.sqlMessage?.includes('email')) {
+        if (sqlMessage.includes('email') || errorMessage.includes('email')) {
           throw new RpcException({
             statusCode: 409,
             message: 'Email already exists',
@@ -47,7 +73,16 @@ export class EmployeeService {
           });
         }
       }
-      throw error;
+
+      // Log the actual error for debugging
+      console.error('Employee creation error:', error);
+
+      // Re-throw with a more descriptive error
+      throw new RpcException({
+        statusCode: 500,
+        message: 'Failed to create employee: ' + (errorMessage || 'Unknown error'),
+        code: 'CREATE_EMPLOYEE_FAILED',
+      });
     }
   }
 
@@ -145,7 +180,11 @@ export class EmployeeService {
     if (dto.fullName !== undefined) updateData.fullName = dto.fullName;
     if (dto.department !== undefined) updateData.department = dto.department;
     if (dto.position !== undefined) updateData.position = dto.position;
-    if (dto.joinDate !== undefined) updateData.joinDate = dto.joinDate;
+    if (dto.joinDate !== undefined) {
+      // Convert joinDate to YYYY-MM-DD format for MySQL DATE type
+      const dateObj = new Date(dto.joinDate);
+      updateData.joinDate = dateObj.toISOString().split('T')[0];
+    }
 
     // Always update the updatedAt timestamp
     updateData.updatedAt = new Date();

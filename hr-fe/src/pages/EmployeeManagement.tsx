@@ -30,6 +30,7 @@ const EmployeeManagement = () => {
     department: '',
     position: '',
     joinDate: '',
+    password: '',
     status: 'active' as 'active' | 'inactive',
   });
 
@@ -70,6 +71,7 @@ const EmployeeManagement = () => {
         department: employee.department,
         position: employee.position,
         joinDate: employee.joinDate,
+        password: '',  // Not used when editing, kept for type compatibility
         status: employee.status || 'active',
       });
     } else {
@@ -81,6 +83,7 @@ const EmployeeManagement = () => {
         department: '',
         position: '',
         joinDate: '',
+        password: '',
         status: 'active',
       });
     }
@@ -93,24 +96,32 @@ const EmployeeManagement = () => {
   };
 
   const handleSubmit = async () => {
-    if (!formData.fullName || !formData.email || !formData.department) {
+    // Check all required fields
+    if (!formData.fullName || !formData.email || !formData.employeeCode || !formData.joinDate) {
       alert('Please fill in all required fields');
+      return;
+    }
+
+    // Password is required for new employees
+    if (!editingEmployee && (!formData.password || formData.password.length < 8)) {
+      alert('Password must be at least 8 characters long');
       return;
     }
 
     setIsSaving(true);
     try {
       if (editingEmployee) {
-        const response = await employeeService.update(editingEmployee.id, formData);
+        // Strip status and password since backend doesn't accept them for updates
+        const { status, password, ...updateData } = formData;
+        const response = await employeeService.update(editingEmployee.id, updateData);
         if (response.success) {
           loadEmployees();
           handleCloseModal();
         }
       } else {
-        const response = await employeeService.create({
-          userId: Math.random(),
-          ...formData,
-        });
+        // Strip status since backend doesn't accept it for creation
+        const { status, ...createData } = formData;
+        const response = await employeeService.create(createData);
         if (response.success) {
           loadEmployees();
           handleCloseModal();
@@ -308,7 +319,7 @@ const EmployeeManagement = () => {
             <Input
               label="Employee Code"
               value={formData.employeeCode}
-              onChange={(e) => setFormData({ ...formData, employeeCode: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, employeeCode: e.target.value.toUpperCase() })}
               placeholder="EMP001"
               required
             />
@@ -333,9 +344,18 @@ const EmployeeManagement = () => {
               value={formData.position}
               onChange={(e) => setFormData({ ...formData, position: e.target.value })}
               placeholder="Job title"
-              required
             />
           </div>
+          {!editingEmployee && (
+            <Input
+              label="Password"
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              placeholder="Minimum 8 characters"
+              required
+            />
+          )}
           <Select
             label="Status"
             value={formData.status}
